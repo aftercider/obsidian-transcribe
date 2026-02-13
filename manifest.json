@@ -1,0 +1,11 @@
+{
+  "id": "whisper-transcribe",
+  "name": "Whisper Transcribe",
+  "version": "0.1.0",
+  "minAppVersion": "1.0.0",
+  "description": "Whisper APIを使用した音声録音・文字起こしのObsidianプラグイン",
+  "author": "aftercider",
+  "authorUrl": "https://github.com/aftercider",
+  "fundingUrl": "",
+  "isDesktopOnly": false
+}

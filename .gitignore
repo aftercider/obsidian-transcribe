@@ -1,0 +1,32 @@
+# ビルド出力
+main.js
+*.js.map
+
+# 依存関係
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# テスト
+coverage/
+
+# 環境設定
+.env
+.env.local
+
+# 一時ファイル
+*.log
+*.tmp
+dist/
+
+# obsidian
+data.json
