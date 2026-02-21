@@ -32,6 +32,9 @@ export class RecorderModal extends Modal {
   }) => void;
   private onRecorderChange: (recorder: AudioRecorder | null, state: ModalState, duration: number) => void;
 
+  // 既存音声ファイルからの再文字起こし用
+  private existingAudioPath: string | null = null;
+
   private recorder: AudioRecorder | null = null;
   private state: ModalState = 'ready';
   private audioBlob: Blob | null = null;
@@ -73,7 +76,8 @@ export class RecorderModal extends Modal {
       percentage?: number;
     }) => void,
     onRecorderChange: (recorder: AudioRecorder | null, state: ModalState, duration: number) => void,
-    existingRecorder?: { recorder: AudioRecorder; state: ModalState; duration: number }
+    existingRecorder?: { recorder: AudioRecorder; state: ModalState; duration: number },
+    existingAudio?: { blob: Blob; path: string }
   ) {
     super(app);
     this.transcriptionService = transcriptionService;
@@ -81,6 +85,12 @@ export class RecorderModal extends Modal {
     this.settings = settings;
     this.onStatusUpdate = onStatusUpdate;
     this.onRecorderChange = onRecorderChange;
+
+    // 既存の音声ファイルからの再文字起こし
+    if (existingAudio) {
+      this.audioBlob = existingAudio.blob;
+      this.existingAudioPath = existingAudio.path;
+    }
 
     // 既存の録音を引き継ぐ
     if (existingRecorder) {
@@ -177,6 +187,16 @@ export class RecorderModal extends Modal {
     }
     
     this.updateButtons();
+
+    // 既存音声ファイルからの再文字起こしの場合、即座にトリミングフローへ
+    if (this.audioBlob && this.existingAudioPath) {
+      if (this.settings.enableTrimming) {
+        void this.startTrimming();
+      } else {
+        this.state = 'stopped';
+        this.updateButtons();
+      }
+    }
 
     // スタイルを追加
     this.addStyles();
@@ -385,9 +405,15 @@ export class RecorderModal extends Modal {
         });
       };
 
-      // 音声ファイルを保存（常にオリジナルを保存）
-      const audioInfo = await this.storageService.saveAudio(this.audioBlob, this.duration);
-      new Notice(t('notice.audioSaved', { path: audioInfo.path }));
+      // 音声ファイルを保存（既存ファイルからの再文字起こしの場合はスキップ）
+      let audioPath: string;
+      if (this.existingAudioPath) {
+        audioPath = this.existingAudioPath;
+      } else {
+        const audioInfo = await this.storageService.saveAudio(this.audioBlob, this.duration);
+        new Notice(t('notice.audioSaved', { path: audioInfo.path }));
+        audioPath = audioInfo.path;
+      }
 
       // オフラインチェック
       if (!navigator.onLine) {
@@ -401,7 +427,7 @@ export class RecorderModal extends Modal {
 
       // メタデータを作成
       const metadata = this.storageService.createMetadata(
-        audioInfo.path,
+        audioPath,
         this.settings.language,
         this.settings.model,
         this.duration

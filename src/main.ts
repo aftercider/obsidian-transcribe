@@ -3,7 +3,7 @@
 
 import { Plugin, Notice, TFile, Menu, EventRef } from 'obsidian';
 import { SettingsTab, DEFAULT_SETTINGS, type PluginSettings } from './settings';
-import { TranscriptionService, type TranscriptionConfig, type TranscriptionProgress } from './api';
+import { TranscriptionService, type TranscriptionConfig } from './api';
 import { StorageService, type StorageConfig } from './storage';
 import { AudioRecorder } from './recorder';
 import { RecorderModal, type ModalState } from './ui/RecorderModal';
@@ -224,54 +224,28 @@ export default class WhisperTranscribePlugin extends Plugin {
   }
 
   /**
-   * ファイルを文字起こし
+   * ファイルを文字起こし（トリミングUI付き）
    */
   private async transcribeFile(file: TFile): Promise<void> {
     try {
-      new Notice(t('notice.recordingStarted')); // 処理開始通知
-
       // ファイルを読み込む
       const arrayBuffer = await this.app.vault.readBinary(file);
       const blob = new Blob([arrayBuffer], { type: this.getMimeType(file.extension) });
 
-      // 進捗通知
-      this.transcriptionService.onProgress = (progress: TranscriptionProgress): void => {
-        this.updateStatusBar({
-          status: 'uploading',
-          percentage: progress.percentage,
-          uploadedMB: progress.uploadedBytes / (1024 * 1024),
-          totalMB: progress.totalBytes / (1024 * 1024)
-        });
-      };
-
-      // 文字起こし実行
-      const result = await this.transcriptionService.transcribe(blob);
-
-      // メタデータを作成
-      const metadata = this.storageService.createMetadata(
-        file.path,
-        this.settings.language,
-        this.settings.model,
-        result.duration
+      // トリミングUI付きモーダルを開く
+      const modal = new RecorderModal(
+        this.app,
+        this.transcriptionService,
+        this.storageService,
+        this.settings,
+        (state) => this.updateStatusBar(state),
+        (recorder, state, duration) => this.handleRecorderChange(recorder, state, duration),
+        undefined, // existingRecorder
+        { blob, path: file.path } // existingAudio
       );
-
-      // 結果を保存
-      const transcriptPath = await this.storageService.saveTranscript(result, metadata);
-
-      // ステータスバーをクリア
-      this.clearStatusBar();
-
-      // 成功通知
-      new Notice(t('notice.transcriptionComplete'));
-
-      // 作成したファイルを開く
-      const transcriptFile = this.app.vault.getAbstractFileByPath(transcriptPath);
-      if (transcriptFile instanceof TFile) {
-        await this.app.workspace.openLinkText(transcriptPath, '');
-      }
+      modal.open();
     } catch (error) {
       console.error('Transcription error:', error);
-      this.clearStatusBar();
       new Notice(t('notice.transcriptionFailed', { error: (error as Error).message }));
     }
   }
