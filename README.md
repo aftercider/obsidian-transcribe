@@ -1,6 +1,7 @@
 # Whisper Transcribe for Obsidian
 
 [![CI](https://github.com/aftercider/obsidian-transcribe/actions/workflows/ci.yml/badge.svg)](https://github.com/aftercider/obsidian-transcribe/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/aftercider/obsidian-transcribe/graph/badge.svg)](https://codecov.io/gh/aftercider/obsidian-transcribe)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22whisper-transcribe%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json)](https://obsidian.md/plugins?id=whisper-transcribe)
 
@@ -142,7 +143,7 @@ npm run build
 npm test
 
 # カバレッジ付き
-npm test -- --coverage
+npm run test:coverage
 ```
 
 ### リント
