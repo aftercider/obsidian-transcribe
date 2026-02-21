@@ -1,5 +1,6 @@
 // i18n モジュールのテスト
 
+import { describe, it, expect, beforeEach } from 'vitest';
 import { I18n, t, getLocale, setLocale, type Locale } from '../i18n';
 import { setMomentLocale } from './setup';
 

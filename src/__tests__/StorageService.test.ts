@@ -1,5 +1,6 @@
 // StorageService モジュールのテスト
 
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { 
   StorageService, 
   type StorageConfig,
@@ -12,15 +13,15 @@ import type { TranscriptionResult } from '../api/TranscriptionService';
 // モックVaultを作成
 const createMockVault = () => ({
   adapter: {
-    exists: jest.fn().mockResolvedValue(false),
-    mkdir: jest.fn().mockResolvedValue(undefined),
-    write: jest.fn().mockResolvedValue(undefined),
-    writeBinary: jest.fn().mockResolvedValue(undefined)
+    exists: vi.fn().mockResolvedValue(false),
+    mkdir: vi.fn().mockResolvedValue(undefined),
+    write: vi.fn().mockResolvedValue(undefined),
+    writeBinary: vi.fn().mockResolvedValue(undefined)
   },
-  getAbstractFileByPath: jest.fn().mockReturnValue(null),
-  create: jest.fn().mockResolvedValue({ path: 'test.md' }),
-  createBinary: jest.fn().mockResolvedValue({ path: 'test.webm' }),
-  createFolder: jest.fn().mockResolvedValue(undefined)
+  getAbstractFileByPath: vi.fn().mockReturnValue(null),
+  create: vi.fn().mockResolvedValue({ path: 'test.md' }),
+  createBinary: vi.fn().mockResolvedValue({ path: 'test.webm' }),
+  createFolder: vi.fn().mockResolvedValue(undefined)
 });
 
 describe('StorageService', () => {
@@ -35,7 +36,7 @@ describe('StorageService', () => {
       transcriptFolder: 'transcripts'
     };
     service = new StorageService(mockVault as unknown as StorageService['vault'], mockConfig);
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('saveAudio', () => {

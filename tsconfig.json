@@ -24,7 +24,6 @@
       "ES2022"
     ],
     "types": [
-      "jest",
       "node"
     ],
     "paths": {

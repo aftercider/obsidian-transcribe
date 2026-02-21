@@ -1,5 +1,6 @@
 // AudioRecorder モジュールのテスト
 
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AudioRecorder, type RecorderState } from '../recorder/AudioRecorder';
 
 describe('AudioRecorder', () => {
@@ -7,7 +8,7 @@ describe('AudioRecorder', () => {
 
   beforeEach(() => {
     recorder = new AudioRecorder();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(async () => {
@@ -42,7 +43,7 @@ describe('AudioRecorder', () => {
     });
 
     it('onStateChange コールバックが呼ばれる', async () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
       recorder.onStateChange = callback;
       
       await recorder.start();
@@ -54,7 +55,7 @@ describe('AudioRecorder', () => {
 
     it('マイク権限がない場合、NotAllowedError を投げる', async () => {
       // navigator.mediaDevices.getUserMedia を拒否するようにモック
-      const mockGetUserMedia = jest.fn().mockRejectedValue(
+      const mockGetUserMedia = vi.fn().mockRejectedValue(
         new DOMException('Permission denied', 'NotAllowedError')
       );
       Object.defineProperty(navigator, 'mediaDevices', {
@@ -66,7 +67,7 @@ describe('AudioRecorder', () => {
     });
 
     it('マイクが見つからない場合、NotFoundError を投げる', async () => {
-      const mockGetUserMedia = jest.fn().mockRejectedValue(
+      const mockGetUserMedia = vi.fn().mockRejectedValue(
         new DOMException('No microphone found', 'NotFoundError')
       );
       Object.defineProperty(navigator, 'mediaDevices', {
@@ -78,7 +79,7 @@ describe('AudioRecorder', () => {
     });
 
     it('その他のエラーはそのままスローされる', async () => {
-      const mockGetUserMedia = jest.fn().mockRejectedValue(
+      const mockGetUserMedia = vi.fn().mockRejectedValue(
         new Error('Unknown error')
       );
       Object.defineProperty(navigator, 'mediaDevices', {
@@ -201,7 +202,7 @@ describe('AudioRecorder', () => {
 
   describe('エラーハンドリング', () => {
     it('onError コールバックが設定できる', () => {
-      const errorCallback = jest.fn();
+      const errorCallback = vi.fn();
       recorder.onError = errorCallback;
       
       expect(recorder.onError).toBe(errorCallback);

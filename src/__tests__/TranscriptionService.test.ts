@@ -1,5 +1,6 @@
 // TranscriptionService モジュールのテスト
 
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { 
   TranscriptionService, 
   type TranscriptionConfig, 
@@ -23,7 +24,7 @@ describe('TranscriptionService', () => {
       chunkSizeMB: 20
     };
     service = new TranscriptionService(mockConfig);
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('正常ケース', () => {
@@ -39,7 +40,7 @@ describe('TranscriptionService', () => {
         language: 'ja'
       };
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ text: mockResponse.text })
       });
@@ -52,10 +53,10 @@ describe('TranscriptionService', () => {
 
     it('進捗コールバックが呼ばれる', async () => {
       const mockBlob = new Blob(['x'.repeat(1024)], { type: 'audio/webm' });
-      const progressCallback = jest.fn();
+      const progressCallback = vi.fn();
       service.onProgress = progressCallback;
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ text: 'test' })
       });
@@ -71,7 +72,7 @@ describe('TranscriptionService', () => {
       // 30MBのモックBlob
       const mockBlob = new Blob(['x'.repeat(30 * 1024 * 1024)], { type: 'audio/webm' });
       
-      (global.fetch as jest.Mock)
+      (global.fetch as Mock)
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ text: '最初のチャンク' })
@@ -92,7 +93,7 @@ describe('TranscriptionService', () => {
     it('分割結果がマージされる', async () => {
       const mockBlob = new Blob(['x'.repeat(45 * 1024 * 1024)], { type: 'audio/webm' });
       
-      (global.fetch as jest.Mock)
+      (global.fetch as Mock)
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ text: 'パート1' })
@@ -115,7 +116,7 @@ describe('TranscriptionService', () => {
 
   describe('接続テスト', () => {
     it('有効なAPIキーで成功する', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({})
       });
@@ -126,7 +127,7 @@ describe('TranscriptionService', () => {
     });
 
     it('無効なAPIキーで失敗する', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: false,
         status: 401,
         json: async () => ({ error: { message: 'Invalid API key' } })
@@ -142,7 +143,7 @@ describe('TranscriptionService', () => {
     it('401エラーで認証失敗エラーを返す', async () => {
       const mockBlob = new Blob(['test'], { type: 'audio/webm' });
       
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: false,
         status: 401,
         json: async () => ({ error: { message: 'Invalid API key' } })
@@ -154,7 +155,7 @@ describe('TranscriptionService', () => {
     it('429エラーでレート制限エラーを返す', async () => {
       const mockBlob = new Blob(['test'], { type: 'audio/webm' });
       
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: false,
         status: 429,
         json: async () => ({ error: { message: 'Rate limit exceeded' } })
@@ -167,7 +168,7 @@ describe('TranscriptionService', () => {
       const mockBlob = new Blob(['test'], { type: 'audio/webm' });
       
       // タイムアウトをシミュレート
-      (global.fetch as jest.Mock).mockImplementationOnce(() => 
+      (global.fetch as Mock).mockImplementationOnce(() => 
         new Promise((_, reject) => {
           setTimeout(() => reject(new Error('timeout')), 100);
         })
@@ -185,17 +186,17 @@ describe('TranscriptionService', () => {
     it('ネットワークエラーを返す', async () => {
       const mockBlob = new Blob(['test'], { type: 'audio/webm' });
       
-      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+      (global.fetch as Mock).mockRejectedValueOnce(new Error('Network error'));
 
       await expect(service.transcribe(mockBlob)).rejects.toThrow('ネットワークエラー');
     });
 
     it('onErrorコールバックが呼ばれる', async () => {
       const mockBlob = new Blob(['test'], { type: 'audio/webm' });
-      const errorCallback = jest.fn();
+      const errorCallback = vi.fn();
       service.onError = errorCallback;
       
-      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Test error'));
+      (global.fetch as Mock).mockRejectedValueOnce(new Error('Test error'));
 
       await expect(service.transcribe(mockBlob)).rejects.toThrow();
       expect(errorCallback).toHaveBeenCalled();
@@ -206,7 +207,7 @@ describe('TranscriptionService', () => {
     it('正しいヘッダーでリクエストする', async () => {
       const mockBlob = new Blob(['test'], { type: 'audio/webm' });
       
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ text: 'test' })
       });
@@ -227,14 +228,14 @@ describe('TranscriptionService', () => {
     it('FormDataにmodelとlanguageが含まれる', async () => {
       const mockBlob = new Blob(['test'], { type: 'audio/webm' });
       
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ text: 'test' })
       });
 
       await service.transcribe(mockBlob);
       
-      const callArgs = (global.fetch as jest.Mock).mock.calls[0];
+      const callArgs = (global.fetch as Mock).mock.calls[0];
       const body = callArgs[1].body as FormData;
       
       expect(body.get('model')).toBe(mockConfig.model);
@@ -249,14 +250,14 @@ describe('TranscriptionService', () => {
       
       const mockBlob = new Blob(['test'], { type: 'audio/webm' });
       
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ text: 'test' })
       });
 
       await serviceWithPrompt.transcribe(mockBlob);
       
-      const callArgs = (global.fetch as jest.Mock).mock.calls[0];
+      const callArgs = (global.fetch as Mock).mock.calls[0];
       const body = callArgs[1].body as FormData;
       
       expect(body.get('prompt')).toBe('テスト用語');
@@ -272,7 +273,7 @@ describe('TranscriptionService', () => {
         progressValues.push(progress.percentage);
       };
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ text: 'test' })
       });
@@ -293,7 +294,7 @@ describe('TranscriptionService', () => {
         phases.push(progress.phase);
       };
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ text: 'test' })
       });
@@ -314,7 +315,7 @@ describe('TranscriptionService', () => {
       // 更新された設定でテスト
       const mockBlob = new Blob(['test'], { type: 'audio/webm' });
       
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ text: 'test' })
       });
@@ -322,7 +323,7 @@ describe('TranscriptionService', () => {
       // transcribe to verify config was updated
       newService.transcribe(mockBlob);
       
-      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      const fetchCall = (global.fetch as Mock).mock.calls[0];
       const formData = fetchCall[1].body as FormData;
       expect(formData.get('model')).toBe('gpt-4o-mini-transcribe');
     });
@@ -338,14 +339,14 @@ describe('TranscriptionService', () => {
       
       const mockBlob = new Blob(['test'], { type: 'audio/webm' });
       
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ text: 'test' })
       });
 
       newService.transcribe(mockBlob);
       
-      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      const fetchCall = (global.fetch as Mock).mock.calls[0];
       const formData = fetchCall[1].body as FormData;
       expect(formData.get('language')).toBe('en');
     });

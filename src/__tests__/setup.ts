@@ -1,11 +1,13 @@
-// Jestテスト用のセットアップファイル
+// Vitestテスト用のセットアップファイル
+
+import { vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 // getUserMedia のデフォルトモック実装を作成
 function createGetUserMediaMock() {
-  return jest.fn().mockResolvedValue({
-    getTracks: () => [{ stop: jest.fn() }],
+  return vi.fn().mockResolvedValue({
+    getTracks: () => [{ stop: vi.fn() }],
     getAudioTracks: () => [{ 
-      stop: jest.fn(),
+      stop: vi.fn(),
       getSettings: () => ({ sampleRate: 16000 })
     }]
   });
@@ -13,7 +15,7 @@ function createGetUserMediaMock() {
 
 // グローバルなモック設定
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   // clearAllMocks の後にモックを再設定
   if (global.navigator?.mediaDevices) {
      
@@ -24,7 +26,7 @@ beforeEach(() => {
 // console.error をテスト中にキャプチャ
 const originalError = console.error;
 beforeAll(() => {
-  console.error = jest.fn();
+  console.error = vi.fn();
 });
 
 afterAll(() => {
@@ -103,7 +105,7 @@ class MockAudioContext {
 
   createMediaStreamSource(_stream: MediaStream): { connect: (node: AudioNode) => void } {
     return {
-      connect: jest.fn()
+      connect: vi.fn()
     };
   }
 
@@ -146,7 +148,7 @@ export function setMomentLocale(locale: string): void {
 }
 
 // fetch のモック
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 // Blob.arrayBuffer のポリフィル（jsdom用）
 if (!Blob.prototype.arrayBuffer) {

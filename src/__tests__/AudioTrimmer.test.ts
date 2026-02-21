@@ -1,5 +1,6 @@
 // AudioTrimmer モジュールのテスト
 
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { 
   AudioTrimmer, 
   rmsToDb, 
@@ -15,7 +16,7 @@ describe('AudioTrimmer', () => {
 
   beforeEach(() => {
     trimmer = new AudioTrimmer(200); // 200ms resolution
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('ユーティリティ関数', () => {
