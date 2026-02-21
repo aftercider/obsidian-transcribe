@@ -1,7 +1,7 @@
 // 音声トリミングモジュール
 // 波形分析、無音検出、トリミング処理を行う
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef
 const lamejs = require('lamejs');
 
 /**
