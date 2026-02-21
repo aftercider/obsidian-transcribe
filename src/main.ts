@@ -6,8 +6,17 @@ import { SettingsTab, DEFAULT_SETTINGS, type PluginSettings } from './settings';
 import { TranscriptionService, type TranscriptionConfig, type TranscriptionProgress } from './api';
 import { StorageService, type StorageConfig } from './storage';
 import { AudioRecorder } from './recorder';
-import { RecorderModal } from './ui/RecorderModal';
+import { RecorderModal, type ModalState } from './ui/RecorderModal';
 import { t } from './i18n';
+
+/**
+ * 保持中の録音状態
+ */
+interface ActiveRecording {
+  recorder: AudioRecorder;
+  state: ModalState;
+  duration: number;
+}
 
 /**
  * Whisper Transcribe プラグインクラス
@@ -18,6 +27,7 @@ export default class WhisperTranscribePlugin extends Plugin {
   private storageService!: StorageService;
   private recorder: AudioRecorder | null = null;
   private statusBarItem: HTMLElement | null = null;
+  private activeRecording: ActiveRecording | null = null;
 
   async onload(): Promise<void> {
     console.log('Whisper Transcribe: Loading plugin');
@@ -41,6 +51,13 @@ export default class WhisperTranscribePlugin extends Plugin {
 
     // ステータスバーアイテムを追加
     this.statusBarItem = this.addStatusBarItem();
+    this.statusBarItem.addClass('mod-clickable');
+    this.statusBarItem.addEventListener('click', () => {
+      // 録音中ならモーダルを再表示
+      if (this.activeRecording) {
+        this.openRecorderModal();
+      }
+    });
 
     // ファイルメニューを登録
     this.registerFileMenu();
@@ -187,9 +204,23 @@ export default class WhisperTranscribePlugin extends Plugin {
       this.transcriptionService,
       this.storageService,
       this.settings,
-      (state) => this.updateStatusBar(state)
+      (state) => this.updateStatusBar(state),
+      (recorder, state, duration) => this.handleRecorderChange(recorder, state, duration),
+      this.activeRecording ?? undefined
     );
     modal.open();
+  }
+
+  /**
+   * 録音状態が変わった時のハンドラ
+   */
+  private handleRecorderChange(recorder: AudioRecorder | null, state: ModalState, duration: number): void {
+    if (recorder && (state === 'recording' || state === 'paused')) {
+      this.activeRecording = { recorder, state, duration };
+    } else {
+      this.activeRecording = null;
+      this.clearStatusBar();
+    }
   }
 
   /**
@@ -275,12 +306,15 @@ export default class WhisperTranscribePlugin extends Plugin {
     switch (state.status) {
       case 'recording':
         this.statusBarItem.setText(t('status.recording', { time: state.time || '00:00:00' }));
+        this.statusBarItem.setAttr('title', t('status.clickToOpen'));
         break;
       case 'paused':
         this.statusBarItem.setText(t('status.paused', { time: state.time || '00:00:00' }));
+        this.statusBarItem.setAttr('title', t('status.clickToOpen'));
         break;
       case 'uploading':
         this.statusBarItem.setText(t('status.uploading', { percentage: state.percentage || 0 }));
+        this.statusBarItem.setAttr('title', '');
         break;
     }
   }
@@ -291,6 +325,7 @@ export default class WhisperTranscribePlugin extends Plugin {
   private clearStatusBar(): void {
     if (this.statusBarItem) {
       this.statusBarItem.setText('');
+      this.statusBarItem.setAttr('title', '');
     }
   }
 

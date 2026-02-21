@@ -11,7 +11,7 @@ import type { PluginSettings } from '../settings';
 /**
  * モーダルの表示状態
  */
-type ModalState = 'ready' | 'recording' | 'paused' | 'stopped' | 'analyzing' | 'trimming' | 'uploading';
+export type ModalState = 'ready' | 'recording' | 'paused' | 'stopped' | 'analyzing' | 'trimming' | 'uploading';
 
 interface WakeLockSentinelLike {
   release: () => Promise<void>;
@@ -30,6 +30,7 @@ export class RecorderModal extends Modal {
     time?: string;
     percentage?: number;
   }) => void;
+  private onRecorderChange: (recorder: AudioRecorder | null, state: ModalState, duration: number) => void;
 
   private recorder: AudioRecorder | null = null;
   private state: ModalState = 'ready';
@@ -70,13 +71,23 @@ export class RecorderModal extends Modal {
       status: 'recording' | 'paused' | 'uploading';
       time?: string;
       percentage?: number;
-    }) => void
+    }) => void,
+    onRecorderChange: (recorder: AudioRecorder | null, state: ModalState, duration: number) => void,
+    existingRecorder?: { recorder: AudioRecorder; state: ModalState; duration: number }
   ) {
     super(app);
     this.transcriptionService = transcriptionService;
     this.storageService = storageService;
     this.settings = settings;
     this.onStatusUpdate = onStatusUpdate;
+    this.onRecorderChange = onRecorderChange;
+
+    // 既存の録音を引き継ぐ
+    if (existingRecorder) {
+      this.recorder = existingRecorder.recorder;
+      this.state = existingRecorder.state;
+      this.duration = existingRecorder.duration;
+    }
   }
 
   onOpen(): void {
@@ -159,6 +170,12 @@ export class RecorderModal extends Modal {
 
     // ボタンエリア
     this.buttonContainer = contentEl.createDiv({ cls: 'button-container' });
+    
+    // 既存の録音を引き継いでいる場合は状態を復元
+    if (this.recorder && (this.state === 'recording' || this.state === 'paused')) {
+      this.restoreRecordingState();
+    }
+    
     this.updateButtons();
 
     // スタイルを追加
@@ -167,9 +184,54 @@ export class RecorderModal extends Modal {
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
   }
 
+  /**
+   * 既存の録音状態を復元
+   */
+  private restoreRecordingState(): void {
+    if (!this.recorder) return;
+
+    // UIを現在の状態に更新
+    this.updateTimeDisplay(this.duration);
+    if (this.state === 'paused') {
+      this.statusIcon.setText('⏸');
+    }
+
+    // コールバックを再設定
+    this.recorder.onStateChange = (state: RecorderState): void => {
+      this.duration = state.duration;
+      this.updateTimeDisplay(state.duration);
+      this.updateLevelMeter(state.audioLevel);
+      
+      if (state.status === 'recording') {
+        this.onStatusUpdate({
+          status: 'recording',
+          time: this.formatTime(state.duration)
+        });
+      } else if (state.status === 'paused') {
+        this.onStatusUpdate({
+          status: 'paused',
+          time: this.formatTime(state.duration)
+        });
+      }
+    };
+
+    this.recorder.onError = (error: Error): void => {
+      console.error('Recording error:', error);
+      new Notice(t('notice.transcriptionFailed', { error: error.message }));
+    };
+  }
+
   onClose(): void {
     this.containerEl.removeEventListener('click', this.handleBackgroundClick, true);
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+
+    // 録音中・一時停止中はrecorderを保持してmain.tsに通知
+    if ((this.state === 'recording' || this.state === 'paused') && this.recorder) {
+      this.onRecorderChange(this.recorder, this.state, this.duration);
+      // recorderをnullにしないで保持
+      return;
+    }
+
     void this.releaseWakeLock();
 
     // リソースをクリーンアップ
@@ -177,6 +239,7 @@ export class RecorderModal extends Modal {
       this.recorder.cancel();
       this.recorder = null;
     }
+    this.onRecorderChange(null, 'ready', 0);
   }
 
   /**
@@ -552,6 +615,11 @@ export class RecorderModal extends Modal {
    */
   private async sendTrimmedRecording(): Promise<void> {
     if (!this.audioBlob || !this.trimmer || !this.trimmedSegments) return;
+
+    // トリミング中の状態を表示
+    this.state = 'analyzing';
+    this.updateButtons();
+    this.showAnalyzingState();
 
     try {
       // トリミング実行

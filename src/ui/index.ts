@@ -1,3 +1,3 @@
 // UIモジュールのエクスポート
 
-export { RecorderModal } from './RecorderModal';
+export { RecorderModal, type ModalState } from './RecorderModal';

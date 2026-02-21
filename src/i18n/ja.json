@@ -83,5 +83,6 @@
 
   "status.recording": "🔴 録音中 {time}",
   "status.paused": "⏸ 一時停止 {time}",
-  "status.uploading": "⬆ 送信中 {percentage}%"
+  "status.uploading": "⬆ 送信中 {percentage}%",
+  "status.clickToOpen": "クリックで録音画面を開く"
 }

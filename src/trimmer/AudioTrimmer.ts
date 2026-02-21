@@ -1,6 +1,9 @@
 // 音声トリミングモジュール
 // 波形分析、無音検出、トリミング処理を行う
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const lamejs = require('lamejs');
+
 /**
  * 音声セグメント
  */
@@ -352,8 +355,8 @@ export class AudioTrimmer {
         writeOffset += length;
       }
       
-      // AudioBufferをBlobに変換（MediaRecorderを使用）
-      const trimmedBlob = await this.audioBufferToBlob(trimmedBuffer, audioBlob.type);
+      // AudioBufferをMP3 Blobに変換（lamejs使用、即座に完了）
+      const trimmedBlob = this.audioBufferToMp3Blob(trimmedBuffer);
       
       const stats = this.calculateTrimStats(segments, audioBuffer.duration);
       
@@ -371,58 +374,54 @@ export class AudioTrimmer {
   }
 
   /**
-   * AudioBufferをBlobに変換
+   * AudioBufferをMP3 Blobに変換（lamejs使用、即座に完了）
    */
-  private async audioBufferToBlob(
-    audioBuffer: AudioBuffer,
-    mimeType: string
-  ): Promise<Blob> {
-    const audioContext = new AudioContext();
-    
-    try {
-      // MediaStreamDestinationを作成
-      const destination = audioContext.createMediaStreamDestination();
-      
-      // AudioBufferSourceを作成して再生
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(destination);
-      
-      // MediaRecorderで録音
-      const mediaRecorder = new MediaRecorder(destination.stream, {
-        mimeType: mimeType.includes('webm') ? 'audio/webm;codecs=opus' : 'audio/webm'
-      });
-      
-      const chunks: Blob[] = [];
-      
-      return new Promise<Blob>((resolve, reject) => {
-        mediaRecorder.ondataavailable = (e): void => {
-          if (e.data.size > 0) {
-            chunks.push(e.data);
-          }
-        };
-        
-        mediaRecorder.onstop = (): void => {
-          const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
-          resolve(blob);
-        };
-        
-        mediaRecorder.onerror = (e): void => {
-          reject(new Error(`MediaRecorder error: ${e}`));
-        };
-        
-        mediaRecorder.start();
-        source.start(0);
-        
-        // 録音終了をスケジュール
-        setTimeout(() => {
-          source.stop();
-          mediaRecorder.stop();
-        }, audioBuffer.duration * 1000 + 100);
-      });
-    } finally {
-      // AudioContextは録音完了後にクローズする必要があるため、
-      // ここではクローズしない（Promise内で使用中）
+  private audioBufferToMp3Blob(audioBuffer: AudioBuffer): Blob {
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const kbps = 128;
+    const mp3encoder = new lamejs.Mp3Encoder(numChannels, sampleRate, kbps);
+
+    const numFrames = audioBuffer.length;
+    const sampleBlockSize = 1152; // MP3フレームサイズ
+    const mp3Data: Uint8Array[] = [];
+
+    // Float32 → Int16 変換
+    const floatTo16BitPCM = (float32: Float32Array): Int16Array => {
+      const int16 = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]));
+        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      return int16;
+    };
+
+    const leftData = floatTo16BitPCM(audioBuffer.getChannelData(0));
+    const rightData = numChannels > 1 
+      ? floatTo16BitPCM(audioBuffer.getChannelData(1)) 
+      : undefined;
+
+    for (let i = 0; i < numFrames; i += sampleBlockSize) {
+      const leftChunk = leftData.subarray(i, i + sampleBlockSize);
+      const rightChunk = rightData?.subarray(i, i + sampleBlockSize);
+
+      let mp3buf: Uint8Array;
+      if (rightChunk) {
+        mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
+      } else {
+        mp3buf = mp3encoder.encodeBuffer(leftChunk);
+      }
+
+      if (mp3buf.length > 0) {
+        mp3Data.push(mp3buf);
+      }
     }
+
+    const end: Uint8Array = mp3encoder.flush();
+    if (end.length > 0) {
+      mp3Data.push(end);
+    }
+
+    return new Blob(mp3Data as BlobPart[], { type: 'audio/mpeg' });
   }
 }

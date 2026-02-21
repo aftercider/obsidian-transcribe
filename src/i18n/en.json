@@ -83,5 +83,6 @@
 
   "status.recording": "🔴 Recording {time}",
   "status.paused": "⏸ Paused {time}",
-  "status.uploading": "⬆ Uploading {percentage}%"
+  "status.uploading": "⬆ Uploading {percentage}%",
+  "status.clickToOpen": "Click to open recorder"
 }
