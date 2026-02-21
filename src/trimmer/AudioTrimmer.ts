@@ -396,18 +396,18 @@ export class AudioTrimmer {
       const chunks: Blob[] = [];
       
       return new Promise<Blob>((resolve, reject) => {
-        mediaRecorder.ondataavailable = (e) => {
+        mediaRecorder.ondataavailable = (e): void => {
           if (e.data.size > 0) {
             chunks.push(e.data);
           }
         };
         
-        mediaRecorder.onstop = () => {
+        mediaRecorder.onstop = (): void => {
           const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
           resolve(blob);
         };
         
-        mediaRecorder.onerror = (e) => {
+        mediaRecorder.onerror = (e): void => {
           reject(new Error(`MediaRecorder error: ${e}`));
         };
         
