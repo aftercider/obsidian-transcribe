@@ -12,6 +12,11 @@ import type { PluginSettings } from '../settings';
  */
 type ModalState = 'ready' | 'recording' | 'paused' | 'stopped' | 'uploading';
 
+interface WakeLockSentinelLike {
+  release: () => Promise<void>;
+  addEventListener?: (type: 'release', listener: () => void) => void;
+}
+
 /**
  * 録音モーダルクラス
  */
@@ -29,6 +34,7 @@ export class RecorderModal extends Modal {
   private state: ModalState = 'ready';
   private audioBlob: Blob | null = null;
   private duration: number = 0;
+  private wakeLockSentinel: WakeLockSentinelLike | null = null;
 
   // UI要素
   private statusIcon!: HTMLElement;
@@ -63,6 +69,9 @@ export class RecorderModal extends Modal {
     contentEl.empty();
     contentEl.addClass('whisper-transcribe-modal');
 
+    // 録音中は背景クリックでモーダルを閉じないようにする
+    this.containerEl.addEventListener('click', this.handleBackgroundClick, true);
+
     // モーダルタイトル
     contentEl.createEl('h2', { text: t('modal.title') });
 
@@ -90,14 +99,14 @@ export class RecorderModal extends Modal {
 
     // スタイルを追加
     this.addStyles();
+
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
   }
 
   onClose(): void {
-    // 録音中ならキャンセル確認
-    if (this.state === 'recording' || this.state === 'paused') {
-      // バックグラウンドで継続
-      return;
-    }
+    this.containerEl.removeEventListener('click', this.handleBackgroundClick, true);
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    void this.releaseWakeLock();
 
     // リソースをクリーンアップ
     if (this.recorder) {
@@ -142,6 +151,7 @@ export class RecorderModal extends Modal {
       await this.recorder.start();
       this.state = 'recording';
       this.updateButtons();
+      await this.requestWakeLock();
       
       new Notice(t('notice.recordingStarted'));
     } catch (error) {
@@ -189,6 +199,7 @@ export class RecorderModal extends Modal {
       this.audioBlob = await this.recorder.stop();
       this.state = 'stopped';
       this.updateButtons();
+      await this.releaseWakeLock();
       
       new Notice(t('notice.recordingStopped'));
     }
@@ -202,6 +213,7 @@ export class RecorderModal extends Modal {
       this.recorder.cancel();
       this.recorder = null;
     }
+    void this.releaseWakeLock();
     this.audioBlob = null;
     this.state = 'ready';
     this.duration = 0;
@@ -221,6 +233,7 @@ export class RecorderModal extends Modal {
     this.state = 'uploading';
     this.updateButtons();
     this.showProgress();
+    await this.requestWakeLock();
 
     try {
       // 進捗コールバック
@@ -263,6 +276,8 @@ export class RecorderModal extends Modal {
       // 作成したファイルを開く
       await this.app.workspace.openLinkText(transcriptPath, '');
 
+      await this.releaseWakeLock();
+
       this.close();
     } catch (error) {
       console.error('Transcription error:', error);
@@ -270,6 +285,79 @@ export class RecorderModal extends Modal {
       this.state = 'stopped';
       this.hideProgress();
       this.updateButtons();
+      await this.releaseWakeLock();
+    }
+  }
+
+  /**
+   * 録音/送信中かどうか
+   */
+  private shouldHoldWakeLock(): boolean {
+    return this.state === 'recording' || this.state === 'paused' || this.state === 'uploading';
+  }
+
+  /**
+   * 録音中・一時停止中は背景クリックでモーダルを閉じない
+   */
+  private handleBackgroundClick = (e: MouseEvent): void => {
+    if (this.state === 'recording' || this.state === 'paused') {
+      // モーダル外のクリックを無効化
+      if (e.target === this.containerEl) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    }
+  };
+
+  /**
+   * 画面復帰時にWake Lockを再取得
+   */
+  private handleVisibilityChange = (): void => {
+    if (document.visibilityState === 'visible' && this.shouldHoldWakeLock()) {
+      void this.requestWakeLock();
+    }
+  };
+
+  /**
+   * Wake Lockを取得（対応端末のみ）
+   */
+  private async requestWakeLock(): Promise<void> {
+    try {
+      if (this.wakeLockSentinel || !this.shouldHoldWakeLock()) {
+        return;
+      }
+
+      const navigatorWithWakeLock = navigator as Navigator & {
+        wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinelLike> };
+      };
+
+      if (!navigatorWithWakeLock.wakeLock) {
+        return;
+      }
+
+      this.wakeLockSentinel = await navigatorWithWakeLock.wakeLock.request('screen');
+      this.wakeLockSentinel.addEventListener?.('release', () => {
+        this.wakeLockSentinel = null;
+      });
+    } catch {
+      this.wakeLockSentinel = null;
+    }
+  }
+
+  /**
+   * Wake Lockを解放
+   */
+  private async releaseWakeLock(): Promise<void> {
+    if (!this.wakeLockSentinel) {
+      return;
+    }
+
+    try {
+      await this.wakeLockSentinel.release();
+    } catch {
+      // no-op
+    } finally {
+      this.wakeLockSentinel = null;
     }
   }
 
