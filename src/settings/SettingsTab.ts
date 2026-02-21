@@ -196,6 +196,83 @@ export class SettingsTab extends PluginSettingTab {
         })
       );
 
+    // トリミング設定セクション
+    containerEl.createEl('h2', { text: t('settings.trimmingSection') });
+
+    // Enable Trimming
+    new Setting(containerEl)
+      .setName(t('settings.enableTrimming'))
+      .setDesc(t('settings.enableTrimmingDesc'))
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.enableTrimming)
+        .onChange(async (value) => {
+          this.plugin.settings.enableTrimming = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    // Auto Skip Duration
+    new Setting(containerEl)
+      .setName(t('settings.autoSkipDuration'))
+      .setDesc(t('settings.autoSkipDurationDesc'))
+      .addText(text => text
+        .setPlaceholder('20')
+        .setValue(this.plugin.settings.autoSkipDuration.toString())
+        .onChange(async (value) => {
+          const num = parseInt(value, 10);
+          if (!isNaN(num) && num >= 0 && num <= 300) {
+            this.plugin.settings.autoSkipDuration = num;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    // Default Threshold (dB)
+    new Setting(containerEl)
+      .setName(t('settings.defaultThresholdDb'))
+      .setDesc(t('settings.defaultThresholdDbDesc'))
+      .addSlider(slider => slider
+        .setLimits(-60, -10, 1)
+        .setValue(this.plugin.settings.defaultThresholdDb)
+        .setDynamicTooltip()
+        .onChange(async (value) => {
+          this.plugin.settings.defaultThresholdDb = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    // Min Silence Duration
+    new Setting(containerEl)
+      .setName(t('settings.minSilenceDuration'))
+      .setDesc(t('settings.minSilenceDurationDesc'))
+      .addText(text => text
+        .setPlaceholder('0.6')
+        .setValue(this.plugin.settings.minSilenceDuration.toString())
+        .onChange(async (value) => {
+          const num = parseFloat(value);
+          if (!isNaN(num) && num >= 0.1 && num <= 5.0) {
+            this.plugin.settings.minSilenceDuration = num;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    // Silence Margin
+    new Setting(containerEl)
+      .setName(t('settings.silenceMargin'))
+      .setDesc(t('settings.silenceMarginDesc'))
+      .addText(text => text
+        .setPlaceholder('0.2')
+        .setValue(this.plugin.settings.silenceMargin.toString())
+        .onChange(async (value) => {
+          const num = parseFloat(value);
+          if (!isNaN(num) && num >= 0 && num <= 1.0) {
+            this.plugin.settings.silenceMargin = num;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
     // インポート/エクスポートセクション
     containerEl.createEl('h2', { text: 'Import / Export' });
 

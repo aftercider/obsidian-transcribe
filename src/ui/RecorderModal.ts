@@ -4,13 +4,14 @@ import { App, Modal, Notice } from 'obsidian';
 import { AudioRecorder, type RecorderState } from '../recorder';
 import { TranscriptionService, type TranscriptionProgress } from '../api';
 import { StorageService } from '../storage';
+import { AudioTrimmer, type WaveformData, type AudioSegment, type TrimConfig } from '../trimmer';
 import { t } from '../i18n';
 import type { PluginSettings } from '../settings';
 
 /**
  * モーダルの表示状態
  */
-type ModalState = 'ready' | 'recording' | 'paused' | 'stopped' | 'uploading';
+type ModalState = 'ready' | 'recording' | 'paused' | 'stopped' | 'analyzing' | 'trimming' | 'uploading';
 
 interface WakeLockSentinelLike {
   release: () => Promise<void>;
@@ -36,6 +37,13 @@ export class RecorderModal extends Modal {
   private duration: number = 0;
   private wakeLockSentinel: WakeLockSentinelLike | null = null;
 
+  // トリミング関連
+  private trimmer: AudioTrimmer | null = null;
+  private waveformData: WaveformData | null = null;
+  private trimmedSegments: AudioSegment[] | null = null;
+  private currentThresholdDb: number = -40;
+  private trimmedBlob: Blob | null = null;
+
   // UI要素
   private statusIcon!: HTMLElement;
   private timeDisplay!: HTMLElement;
@@ -45,6 +53,13 @@ export class RecorderModal extends Modal {
   private progressContainer!: HTMLElement;
   private progressText!: HTMLElement;
   private progressBar!: HTMLElement;
+
+  // トリミングUI要素
+  private trimmingContainer!: HTMLElement;
+  private waveformContainer!: HTMLElement;
+  private thresholdSlider!: HTMLInputElement;
+  private thresholdValue!: HTMLElement;
+  private trimResultContainer!: HTMLElement;
 
   constructor(
     app: App,
@@ -92,6 +107,55 @@ export class RecorderModal extends Modal {
     this.progressText = this.progressContainer.createDiv({ cls: 'progress-text' });
     this.progressBar = this.progressContainer.createDiv({ cls: 'progress-bar' });
     this.progressBar.createDiv({ cls: 'progress-fill' });
+
+    // トリミングUI（初期は非表示）
+    this.trimmingContainer = contentEl.createDiv({ cls: 'trimming-container hidden' });
+    
+    // 波形表示エリア
+    this.waveformContainer = this.trimmingContainer.createDiv({ cls: 'waveform-container' });
+    
+    // 閾値スライダー
+    const thresholdArea = this.trimmingContainer.createDiv({ cls: 'threshold-area' });
+    thresholdArea.createSpan({ text: t('trimming.threshold'), cls: 'threshold-label' });
+    
+    const sliderContainer = thresholdArea.createDiv({ cls: 'slider-container' });
+    this.thresholdSlider = sliderContainer.createEl('input', {
+      type: 'range',
+      cls: 'threshold-slider'
+    });
+    this.thresholdSlider.min = '-60';
+    this.thresholdSlider.max = '-10';
+    this.thresholdSlider.value = this.settings.defaultThresholdDb.toString();
+    this.thresholdSlider.addEventListener('input', () => {
+      this.currentThresholdDb = parseFloat(this.thresholdSlider.value);
+      this.thresholdValue.setText(`${this.currentThresholdDb.toFixed(0)} dB`);
+      this.updateTrimming();
+    });
+    
+    this.thresholdValue = sliderContainer.createSpan({ 
+      text: `${this.settings.defaultThresholdDb} dB`, 
+      cls: 'threshold-value' 
+    });
+    
+    // 自動検出ボタン
+    const autoBtn = thresholdArea.createEl('button', { 
+      text: t('trimming.autoDetect'),
+      cls: 'auto-detect-btn'
+    });
+    autoBtn.addEventListener('click', () => {
+      if (this.trimmer && this.waveformData) {
+        const autoThreshold = this.trimmer.calculateAutoThreshold(this.waveformData);
+        this.currentThresholdDb = autoThreshold;
+        this.thresholdSlider.value = autoThreshold.toString();
+        this.thresholdValue.setText(`${autoThreshold.toFixed(0)} dB`);
+        this.updateTrimming();
+      }
+    });
+    
+    // トリミング結果表示
+    const resultArea = this.trimmingContainer.createDiv({ cls: 'trim-result-area' });
+    resultArea.createDiv({ text: `📊 ${t('trimming.result')}`, cls: 'trim-result-header' });
+    this.trimResultContainer = resultArea.createDiv({ cls: 'trim-result-container' });
 
     // ボタンエリア
     this.buttonContainer = contentEl.createDiv({ cls: 'button-container' });
@@ -197,11 +261,20 @@ export class RecorderModal extends Modal {
   private async stopRecording(): Promise<void> {
     if (this.recorder) {
       this.audioBlob = await this.recorder.stop();
-      this.state = 'stopped';
-      this.updateButtons();
       await this.releaseWakeLock();
       
       new Notice(t('notice.recordingStopped'));
+
+      // トリミング機能が有効で、録音時間が自動スキップ閾値を超えている場合
+      if (this.settings.enableTrimming && this.duration > this.settings.autoSkipDuration) {
+        await this.startTrimming();
+      } else {
+        if (this.settings.enableTrimming && this.duration <= this.settings.autoSkipDuration) {
+          new Notice(t('trimming.skipped'));
+        }
+        this.state = 'stopped';
+        this.updateButtons();
+      }
     }
   }
 
@@ -227,12 +300,16 @@ export class RecorderModal extends Modal {
   /**
    * 送信
    */
-  private async sendRecording(): Promise<void> {
+  private async sendRecording(useOriginal: boolean = false): Promise<void> {
     if (!this.audioBlob) return;
+
+    // トリミング済みBlobがあり、オリジナルを使わない場合はそれを使う
+    const blobToSend = (!useOriginal && this.trimmedBlob) ? this.trimmedBlob : this.audioBlob;
 
     this.state = 'uploading';
     this.updateButtons();
     this.showProgress();
+    this.hideTrimmingUI();
     await this.requestWakeLock();
 
     try {
@@ -245,7 +322,7 @@ export class RecorderModal extends Modal {
         });
       };
 
-      // 音声ファイルを保存
+      // 音声ファイルを保存（常にオリジナルを保存）
       const audioInfo = await this.storageService.saveAudio(this.audioBlob, this.duration);
       new Notice(t('notice.audioSaved', { path: audioInfo.path }));
 
@@ -256,8 +333,8 @@ export class RecorderModal extends Modal {
         return;
       }
 
-      // 文字起こし実行
-      const result = await this.transcriptionService.transcribe(this.audioBlob);
+      // 文字起こし実行（トリミング済みまたはオリジナルを送信）
+      const result = await this.transcriptionService.transcribe(blobToSend);
 
       // メタデータを作成
       const metadata = this.storageService.createMetadata(
@@ -286,6 +363,207 @@ export class RecorderModal extends Modal {
       this.hideProgress();
       this.updateButtons();
       await this.releaseWakeLock();
+    }
+  }
+
+  /**
+   * トリミング開始
+   */
+  private async startTrimming(): Promise<void> {
+    if (!this.audioBlob) return;
+
+    this.state = 'analyzing';
+    this.updateButtons();
+    this.showTrimmingUI();
+    this.showAnalyzingState();
+
+    try {
+      this.trimmer = new AudioTrimmer(200); // 200ms resolution
+      this.currentThresholdDb = this.settings.defaultThresholdDb;
+
+      // 波形分析
+      this.waveformData = await this.trimmer.analyzeWaveform(this.audioBlob);
+
+      // 自動閾値計算
+      const autoThreshold = this.trimmer.calculateAutoThreshold(this.waveformData);
+      this.currentThresholdDb = autoThreshold;
+      this.thresholdSlider.value = autoThreshold.toString();
+      this.thresholdValue.setText(`${autoThreshold.toFixed(0)} dB`);
+
+      // トリミング範囲計算
+      this.updateTrimming();
+
+      this.state = 'trimming';
+      this.updateButtons();
+    } catch (error) {
+      console.error('Trimming analysis error:', error);
+      // トリミング失敗した場合は通常の停止状態に
+      this.state = 'stopped';
+      this.hideTrimmingUI();
+      this.updateButtons();
+    }
+  }
+
+  /**
+   * トリミング範囲を更新
+   */
+  private updateTrimming(): void {
+    if (!this.trimmer || !this.waveformData) return;
+
+    const config: TrimConfig = {
+      thresholdDb: this.currentThresholdDb,
+      minSilenceDuration: this.settings.minSilenceDuration,
+      silenceMargin: this.settings.silenceMargin
+    };
+
+    this.trimmedSegments = this.trimmer.calculateTrimRanges(this.waveformData, config);
+    
+    // 波形を再描画
+    this.drawWaveform();
+    
+    // 結果を表示
+    this.updateTrimResult();
+  }
+
+  /**
+   * 波形を描画
+   */
+  private drawWaveform(): void {
+    if (!this.trimmedSegments || !this.waveformData) return;
+
+    this.waveformContainer.empty();
+
+    const containerWidth = this.waveformContainer.clientWidth || 400;
+    const segmentsPerRow = Math.floor(containerWidth / 4); // 各セグメントは4px幅
+    const rowHeight = 40;
+    const maxRows = 5;
+
+    const totalSegments = this.trimmedSegments.length;
+    const rowCount = Math.min(maxRows, Math.ceil(totalSegments / segmentsPerRow));
+
+    for (let row = 0; row < rowCount; row++) {
+      const rowDiv = this.waveformContainer.createDiv({ cls: 'waveform-row' });
+      const canvas = rowDiv.createEl('canvas');
+      canvas.width = containerWidth;
+      canvas.height = rowHeight;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+
+      const startIdx = row * segmentsPerRow;
+      const endIdx = Math.min(startIdx + segmentsPerRow, totalSegments);
+
+      for (let i = startIdx; i < endIdx; i++) {
+        const segment = this.trimmedSegments[i];
+        const x = (i - startIdx) * 4;
+        
+        // dBから高さを計算（-60dB～0dBを0～1に正規化）
+        const normalizedDb = Math.max(0, Math.min(1, (segment.avgDb + 60) / 60));
+        const barHeight = Math.max(2, normalizedDb * (rowHeight - 4));
+        const y = (rowHeight - barHeight) / 2;
+
+        // 色：無音はグレー、有効は青
+        ctx.fillStyle = segment.isSilence ? '#888888' : '#4a9eff';
+        ctx.fillRect(x, y, 3, barHeight);
+      }
+    }
+
+    // 残りのセグメントがある場合はスクロールヒントを表示
+    if (totalSegments > rowCount * segmentsPerRow) {
+      const hint = this.waveformContainer.createDiv({ cls: 'waveform-hint' });
+      hint.setText(`... ${totalSegments - rowCount * segmentsPerRow} more segments`);
+    }
+  }
+
+  /**
+   * トリミング結果を更新
+   */
+  private updateTrimResult(): void {
+    if (!this.trimmer || !this.trimmedSegments || !this.waveformData) return;
+
+    const stats = this.trimmer.calculateTrimStats(
+      this.trimmedSegments,
+      this.waveformData.duration
+    );
+
+    this.trimResultContainer.empty();
+
+    const createResultLine = (label: string, value: string): void => {
+      const line = this.trimResultContainer.createDiv({ cls: 'trim-result-line' });
+      line.createSpan({ text: label, cls: 'trim-result-label' });
+      line.createSpan({ text: value, cls: 'trim-result-value' });
+    };
+
+    createResultLine(t('trimming.original'), this.formatTime(stats.trimmedDuration + stats.removedDuration));
+    createResultLine(t('trimming.trimmed'), this.formatTime(stats.trimmedDuration));
+    createResultLine(t('trimming.reduced'), `${this.formatTime(stats.removedDuration)} (${stats.removedPercentage.toFixed(0)}%)`);
+    createResultLine(t('trimming.segments'), `${stats.removedSegments}`);
+  }
+
+  /**
+   * トリミングUIを表示
+   */
+  private showTrimmingUI(): void {
+    // 録音UIを非表示
+    this.statusIcon.parentElement?.addClass('hidden');
+    this.levelMeter.addClass('hidden');
+
+    // タイトルを変更
+    const titleEl = this.contentEl.querySelector('h2');
+    if (titleEl) {
+      titleEl.setText(t('trimming.title'));
+    }
+
+    // トリミングUIを表示
+    this.trimmingContainer.removeClass('hidden');
+  }
+
+  /**
+   * トリミングUIを非表示
+   */
+  private hideTrimmingUI(): void {
+    this.trimmingContainer.addClass('hidden');
+
+    // 録音UIを表示
+    this.statusIcon.parentElement?.removeClass('hidden');
+    this.levelMeter.removeClass('hidden');
+
+    // タイトルを戻す
+    const titleEl = this.contentEl.querySelector('h2');
+    if (titleEl) {
+      titleEl.setText(t('modal.title'));
+    }
+  }
+
+  /**
+   * 分析中の状態を表示
+   */
+  private showAnalyzingState(): void {
+    this.waveformContainer.empty();
+    this.waveformContainer.createDiv({ 
+      cls: 'analyzing-text', 
+      text: t('trimming.analyzing') 
+    });
+    this.trimResultContainer.empty();
+  }
+
+  /**
+   * トリミング済み音声を送信
+   */
+  private async sendTrimmedRecording(): Promise<void> {
+    if (!this.audioBlob || !this.trimmer || !this.trimmedSegments) return;
+
+    try {
+      // トリミング実行
+      const result = await this.trimmer.trimAudio(this.audioBlob, this.trimmedSegments);
+      this.trimmedBlob = result.trimmedBlob;
+      
+      // 送信
+      await this.sendRecording(false);
+    } catch (error) {
+      console.error('Trim error:', error);
+      // トリミング失敗した場合はオリジナルを送信
+      await this.sendRecording(true);
     }
   }
 
@@ -380,8 +658,15 @@ export class RecorderModal extends Modal {
         this.createButton(t('modal.stop'), () => this.stopRecording());
         break;
       case 'stopped':
-        this.createButton(t('modal.send'), () => this.sendRecording(), true);
+        this.createButton(t('modal.send'), () => this.sendRecording(true), true);
         this.createButton(t('modal.cancel'), () => this.cancelRecording());
+        break;
+      case 'analyzing':
+        // 分析中はボタンなし
+        break;
+      case 'trimming':
+        this.createButton(t('trimming.sendOriginal'), () => this.sendRecording(true));
+        this.createButton(t('trimming.send'), () => this.sendTrimmedRecording(), true);
         break;
       case 'uploading':
         // ボタンなし
@@ -525,6 +810,87 @@ export class RecorderModal extends Modal {
       }
       .whisper-transcribe-modal .hidden {
         display: none;
+      }
+      /* トリミングUI */
+      .whisper-transcribe-modal .trimming-container {
+        padding: 10px 0;
+      }
+      .whisper-transcribe-modal .waveform-container {
+        background: var(--background-secondary);
+        border-radius: 5px;
+        padding: 10px;
+        margin-bottom: 15px;
+        max-height: 220px;
+        overflow-y: auto;
+      }
+      .whisper-transcribe-modal .waveform-row {
+        margin-bottom: 5px;
+      }
+      .whisper-transcribe-modal .waveform-row canvas {
+        display: block;
+        width: 100%;
+      }
+      .whisper-transcribe-modal .waveform-hint {
+        text-align: center;
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 5px;
+      }
+      .whisper-transcribe-modal .analyzing-text {
+        text-align: center;
+        padding: 40px;
+        color: var(--text-muted);
+      }
+      .whisper-transcribe-modal .threshold-area {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+        flex-wrap: wrap;
+      }
+      .whisper-transcribe-modal .threshold-label {
+        font-weight: 500;
+      }
+      .whisper-transcribe-modal .slider-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 150px;
+      }
+      .whisper-transcribe-modal .threshold-slider {
+        flex: 1;
+        min-width: 100px;
+      }
+      .whisper-transcribe-modal .threshold-value {
+        min-width: 50px;
+        text-align: right;
+        font-family: monospace;
+      }
+      .whisper-transcribe-modal .auto-detect-btn {
+        font-size: 12px;
+        padding: 4px 8px;
+      }
+      .whisper-transcribe-modal .trim-result-area {
+        background: var(--background-secondary);
+        border-radius: 5px;
+        padding: 10px;
+      }
+      .whisper-transcribe-modal .trim-result-header {
+        font-weight: 500;
+        margin-bottom: 8px;
+      }
+      .whisper-transcribe-modal .trim-result-line {
+        display: flex;
+        justify-content: space-between;
+        padding: 2px 0;
+        font-size: 13px;
+      }
+      .whisper-transcribe-modal .trim-result-label {
+        color: var(--text-muted);
+      }
+      .whisper-transcribe-modal .trim-result-value {
+        font-family: monospace;
       }
     `;
     this.contentEl.appendChild(style);

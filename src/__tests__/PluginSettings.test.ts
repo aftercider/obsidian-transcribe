@@ -64,7 +64,12 @@ describe('PluginSettings', () => {
       initialPrompt: 'Test prompt',
       audioFolder: 'audio',
       transcriptFolder: 'text',
-      chunkSizeMB: 15
+      chunkSizeMB: 15,
+      enableTrimming: true,
+      autoSkipDuration: 20,
+      defaultThresholdDb: -40,
+      minSilenceDuration: 0.6,
+      silenceMargin: 0.2
     };
 
     it('API Keyを除外してエクスポートする', () => {
@@ -102,7 +107,12 @@ describe('PluginSettings', () => {
       initialPrompt: '',
       audioFolder: 'recordings',
       transcriptFolder: 'transcripts',
-      chunkSizeMB: 20
+      chunkSizeMB: 20,
+      enableTrimming: true,
+      autoSkipDuration: 20,
+      defaultThresholdDb: -40,
+      minSilenceDuration: 0.6,
+      silenceMargin: 0.2
     };
 
     const exported: SettingsExport = {
@@ -116,7 +126,12 @@ describe('PluginSettings', () => {
         initialPrompt: 'Imported prompt',
         audioFolder: 'audio',
         transcriptFolder: 'text',
-        chunkSizeMB: 15
+        chunkSizeMB: 15,
+        enableTrimming: true,
+        autoSkipDuration: 20,
+        defaultThresholdDb: -40,
+        minSilenceDuration: 0.6,
+        silenceMargin: 0.2
       }
     };
 
@@ -150,7 +165,12 @@ describe('PluginSettings', () => {
           initialPrompt: '',
           audioFolder: 'recordings',
           transcriptFolder: 'transcripts',
-          chunkSizeMB: 20
+          chunkSizeMB: 20,
+          enableTrimming: true,
+          autoSkipDuration: 20,
+          defaultThresholdDb: -40,
+          minSilenceDuration: 0.6,
+          silenceMargin: 0.2
         }
       };
       const imported = importSettings(partialExport, currentSettings);
@@ -170,7 +190,12 @@ describe('PluginSettings', () => {
       initialPrompt: '',
       audioFolder: 'recordings',
       transcriptFolder: 'transcripts',
-      chunkSizeMB: 20
+      chunkSizeMB: 20,
+      enableTrimming: true,
+      autoSkipDuration: 20,
+      defaultThresholdDb: -40,
+      minSilenceDuration: 0.6,
+      silenceMargin: 0.2
     };
 
     it('有効な設定でエラーなし', () => {

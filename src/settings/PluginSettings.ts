@@ -17,6 +17,13 @@ export interface PluginSettings {
   audioFolder: string;
   transcriptFolder: string;
   chunkSizeMB: number;
+  
+  // トリミング設定
+  enableTrimming: boolean;
+  autoSkipDuration: number;    // この秒数以下はトリミング画面をスキップ
+  defaultThresholdDb: number;  // 無音閾値のデフォルト値（dB）
+  minSilenceDuration: number;  // 無音と判定する最小秒数
+  silenceMargin: number;       // 音声前後の保護マージン（秒）
 }
 
 /**
@@ -32,7 +39,12 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   initialPrompt: '',
   audioFolder: 'recordings',
   transcriptFolder: 'transcripts',
-  chunkSizeMB: 20
+  chunkSizeMB: 20,
+  enableTrimming: true,
+  autoSkipDuration: 20,
+  defaultThresholdDb: -40,
+  minSilenceDuration: 0.6,
+  silenceMargin: 0.2
 };
 
 /**
@@ -99,6 +111,22 @@ export function validateSettings(settings: PluginSettings): string[] {
 
   if (settings.chunkSizeMB < 1 || settings.chunkSizeMB > 24) {
     errors.push('Chunk size must be between 1 and 24 MB');
+  }
+
+  if (settings.autoSkipDuration < 0 || settings.autoSkipDuration > 300) {
+    errors.push('Auto skip duration must be between 0 and 300 seconds');
+  }
+
+  if (settings.defaultThresholdDb < -60 || settings.defaultThresholdDb > -10) {
+    errors.push('Default threshold must be between -60 and -10 dB');
+  }
+
+  if (settings.minSilenceDuration < 0.1 || settings.minSilenceDuration > 5.0) {
+    errors.push('Min silence duration must be between 0.1 and 5.0 seconds');
+  }
+
+  if (settings.silenceMargin < 0 || settings.silenceMargin > 1.0) {
+    errors.push('Silence margin must be between 0 and 1.0 seconds');
   }
 
   return errors;
