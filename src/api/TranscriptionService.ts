@@ -205,7 +205,8 @@ export class TranscriptionService {
    */
   private createFormData(audioBlob: Blob): FormData {
     const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.webm');
+    const filename = this.getFilenameForMimeType(audioBlob.type);
+    formData.append('file', audioBlob, filename);
     formData.append('model', this.config.model);
     formData.append('language', this.config.language);
     formData.append('response_format', 'json');
@@ -216,6 +217,23 @@ export class TranscriptionService {
     }
 
     return formData;
+  }
+
+  /**
+   * MIMEタイプからファイル名を取得
+   */
+  private getFilenameForMimeType(mimeType: string): string {
+    const mimeToExt: Record<string, string> = {
+      'audio/webm': 'audio.webm',
+      'audio/webm;codecs=opus': 'audio.webm',
+      'audio/mpeg': 'audio.mp3',
+      'audio/mp3': 'audio.mp3',
+      'audio/wav': 'audio.wav',
+      'audio/mp4': 'audio.m4a',
+      'audio/ogg': 'audio.ogg',
+      'audio/flac': 'audio.flac',
+    };
+    return mimeToExt[mimeType] || 'audio.webm';
   }
 
   /**
