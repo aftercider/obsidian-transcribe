@@ -37,6 +37,16 @@
 | Transcript Folder | テキスト（フォルダ提案） | パス形式 |
 | Chunk Size (MB) | 数値 | 1-24 |
 
+##### トリミング設定セクション
+
+| 項目 | 入力タイプ | バリデーション |
+|-----|-----------|---------------|
+| Enable Trimming | トグル | - |
+| Auto Skip Duration (秒) | 数値 | 0-300 |
+| Default Threshold (dB) | スライダー | -60〜-10 |
+| Min Silence Duration (秒) | 数値 | 0.1-5.0 |
+| Silence Margin (秒) | 数値 | 0-1.0 |
+
 ##### アクション
 
 | ボタン | 機能 |
@@ -62,6 +72,13 @@ interface PluginSettings {
   audioFolder: string;
   transcriptFolder: string;
   chunkSizeMB: number;
+  
+  // トリミング設定
+  enableTrimming: boolean;
+  autoSkipDuration: number;
+  defaultThresholdDb: number;
+  minSilenceDuration: number;
+  silenceMargin: number;
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
@@ -74,7 +91,12 @@ const DEFAULT_SETTINGS: PluginSettings = {
   initialPrompt: '',
   audioFolder: 'recordings',
   transcriptFolder: 'transcripts',
-  chunkSizeMB: 20
+  chunkSizeMB: 20,
+  enableTrimming: true,
+  autoSkipDuration: 20,
+  defaultThresholdDb: -40,
+  minSilenceDuration: 0.6,
+  silenceMargin: 0.2
 };
 ```
 
@@ -92,7 +114,12 @@ const DEFAULT_SETTINGS: PluginSettings = {
     "initialPrompt": "",
     "audioFolder": "recordings",
     "transcriptFolder": "transcripts",
-    "chunkSizeMB": 20
+    "chunkSizeMB": 20,
+    "enableTrimming": true,
+    "autoSkipDuration": 20,
+    "defaultThresholdDb": -40,
+    "minSilenceDuration": 0.6,
+    "silenceMargin": 0.2
   }
 }
 ```
@@ -116,6 +143,11 @@ const DEFAULT_SETTINGS: PluginSettings = {
 | settings.audioFolder | Audio Folder | 音声フォルダ |
 | settings.transcriptFolder | Transcript Folder | 文字起こしフォルダ |
 | settings.chunkSize | Chunk Size (MB) | チャンクサイズ (MB) |
+| settings.enableTrimming | Enable Trimming | トリミングを有効化 |
+| settings.autoSkipDuration | Auto Skip Duration (sec) | 自動スキップ秒数 |
+| settings.defaultThresholdDb | Default Threshold (dB) | デフォルト閾値 (dB) |
+| settings.minSilenceDuration | Min Silence Duration (sec) | 最小無音長 (秒) |
+| settings.silenceMargin | Silence Margin (sec) | 無音マージン (秒) |
 | settings.testConnection | Test Connection | 接続テスト |
 | settings.testSuccess | Connection successful | 接続成功 |
 | settings.testFailed | Connection failed | 接続失敗 |

@@ -42,7 +42,17 @@ Whisper APIを使用して音声を録音し、文字起こしを行うObsidian�
 | audioFolder | string | "recordings" | 音声ファイル保存フォルダ |
 | transcriptFolder | string | "transcripts" | 文字起こしファイル保存フォルダ |
 
-### 2.3 その他
+### 2.3 トリミング設定
+
+| 設定項目 | 型 | デフォルト値 | 説明 |
+|---------|-----|-------------|------|
+| enableTrimming | boolean | true | トリミング機能を有効化 |
+| autoSkipDuration | number | 20 | この秒数以下はトリミング画面をスキップ |
+| defaultThresholdDb | number | -40 | 無音閾値のデフォルト値（dB） |
+| minSilenceDuration | number | 0.6 | 無音と判定する最小秒数 |
+| silenceMargin | number | 0.2 | 音声前後の保護マージン（秒） |
+
+### 2.4 その他
 
 | 設定項目 | 型 | デフォルト値 | 説明 |
 |---------|-----|-------------|------|
@@ -69,8 +79,9 @@ Whisper APIを使用して音声を録音し、文字起こしを行うObsidian�
    - 音量レベルメーター
 4. 一時停止/再開が可能
 5. 「録音停止」で録音終了
-6. 「送信」ボタンでAPI送信確認
-7. 「キャンセル」で録音破棄
+6. 録音停止後、トリミング編集画面を表示（20秒超の場合）
+7. 「送信」ボタンでAPI送信確認
+8. 「キャンセル」で録音破棄
 
 ### 3.3 モーダルUI
 
